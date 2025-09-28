@@ -14,7 +14,7 @@ class Node():
         self.name = name
         if name is None:
             self.name = "aaaa_" + str(self.global_inc)
-            self.global_inc += 1
+            Node.global_inc += 1
 
     @staticmethod
     def visualize(node, indent=0):
