@@ -53,3 +53,34 @@ def get_forward_fn(graph):
         node._val = node.op(*values)
         return node._val
     return partial(exec_numpy, node=graph)
+
+
+def grad(f, params):
+    """ Backward-mode diff
+    """
+    print("EXEC grad")
+    VJP_map = ad.ops.VJP_map
+    root = build_graph(f, params)
+    breakpoint()
+    Node.visualize(root)
+    # starting from root node (=loss), make a function that composes VJP
+    # one = ad.numpy.ones((1,))
+    one = Node(op=None, shape=(0,), children=[], name="ones")
+    node_list = [(root, one)]
+    name_to_grad = {}
+    while len(node_list):
+        cur_node, cur_u = node_list.pop()
+        if cur_node.op != None:
+            VJP = VJP_map[cur_node.op]
+            # VJP is a function of cur_u and all the other arguments of the function
+            children = [c for c in cur_node.children]
+            current_us = VJP(cur_u, *children)
+            for child, u in zip(children, current_us):
+                node_list.append((child, u))
+        else:
+            # leaf, store gradients!
+            name = cur_node.name
+            print(f"Leaf... storing gradient {name}!")
+            Node.visualize(cur_u)
+            name_to_grad[name] = cur_u
+    return name_to_grad
