@@ -129,7 +129,6 @@ def vec_to_row_mat(v):
             v.tensor.reshape((1, -1))
         )
     else:
-        breakpoint()
         raise ValueError("Unrecognized value")
 
 # it's key to use ops here, and not numpy directly
@@ -145,17 +144,29 @@ def mat_vec_VJP(u, M, v):
     #     ones = ad.numpy.ones((1,))
     # elif isinstance(M, ad.graph.Node):
     #     ones = ad.graph.Node(op=None, shape=(0,), children=[], name="ones")
-    u_row = vec_to_row_mat(u)
+
+    # ȳ corresponds to the adjoint, argument u of the python function
+    # ȳᵀdy = ȳᵀ(Mdv + dMv)
+    #      = (Mdv)ᵀȳ + Tr(ȳᵀdMv)
+    #      = dvᵀ(Mᵀȳ) + Tr(vȳᵀdM)
+    #      = dvᵀ(Mᵀȳ) + Tr(dMᵀȳvᵀ)
+    # ⇒ VJP for v is Mᵀȳ, for M: ȳvᵀ
+    u_col = mat_transpose(vec_to_row_mat(u))
     return (
-        mat_mat_mul(mat_transpose(u_row), vec_to_row_mat(v)),
-        vec_to_row_mat(mat_vec(mat_transpose(M), u)),
+        mat_mat_mul(u_col, vec_to_row_mat(v)),  # VJP of M
+        vec_to_row_mat(mat_vec(mat_transpose(M), u)),  # VJP of v
     )
 
 def scal_vec_mul_VJP(u, a, v):
     return (
-        scal_vec_mul(u, v),
-        mat_transpose(scal_vec_mul(a, u))
+        scal_vec_mul(u, v),  
+        mat_transpose(scal_vec_mul(a, u))  
     )
 
 
-VJP_map = {vec_sum: vec_sum_VJP, mat_vec: mat_vec_VJP, scal_vec_mul: scal_vec_mul_VJP}
+VJP_map = {
+    vec_sum: vec_sum_VJP,
+    mat_vec: mat_vec_VJP,
+    scal_vec_mul: scal_vec_mul_VJP,
+    # TODO rest
+}
