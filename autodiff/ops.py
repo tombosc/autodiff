@@ -5,11 +5,7 @@ import numpy as np
 def vec_sum(v):
     if isinstance(v, ad.graph.Node):
         assert len(v.shape) == 1, "invalid shape"
-        new_node = ad.graph.Node(
-            op=vec_sum, 
-            shape=(0,),
-            children=[v],
-        )
+        new_node = ad.graph.Node(op=vec_sum, shape=(0,), children=[v])
         return new_node
     elif isinstance(v, ad.numpy.Array):
         return ad.numpy.Array(v.tensor.sum())
@@ -21,15 +17,9 @@ def vec_vec_mul(u, v):
     if isinstance(u, ad.graph.Node) and isinstance(v, ad.graph.Node):
         assert len(u.shape) == 1, "invalid shape"
         assert len(v.shape) == 1, "invalid shape"
-        return ad.graph.Node(
-            op=vec_vec_mul, 
-            shape=(0,),
-            children=[u, v],
-        )
+        return ad.graph.Node(op=vec_vec_mul, shape=(0,), children=[u, v])
     elif isinstance(u, ad.numpy.Array) and isinstance(v, ad.numpy.Array):
-        return ad.numpy.Array(
-            np.dot(u.tensor, v.tensor)
-        )
+        return ad.numpy.Array(np.dot(u.tensor, v.tensor))
     else:
         raise ValueError("Unrecognized value")
 

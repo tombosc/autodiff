@@ -45,11 +45,12 @@ class Node():
         for child in node.children:
             Node.visualize(child, indent + 1)
 
-    # TODO implement ADD
-
 
 def build_graph(f, args):
-        """ Takes a function f and builds a graph.
+        """Take a python function f and build a computation graph.
+
+        The leaves of the resulting graph are named after the python function 
+        arguments' names.
         """
         params_f = signature(f).parameters
         assert len(args) == len(params_f)
@@ -61,29 +62,26 @@ def build_graph(f, args):
 
 
 def get_forward_fn(graph, verbose_level=0):
+    """Get the python function corresponding to a computation graph.
+    """
     def exec_numpy(node, **kwargs):
-        """ v is a list of tensors.
-        """
         if len(node.children) == 0 and node.op == None:  # leaf
-            node._val = kwargs[node.name]
-            return
+            return kwargs[node.name]
         values = []
         for child in node.children:
             if verbose_level >= 1:
                 print(f"Computing child {child.name}")
-            exec_numpy(child, **kwargs)
-            values.append(child._val)
+            val = exec_numpy(child, **kwargs)
+            values.append(val)
         assert node.op is not None, "Op is None but node not leaf?"
-        node._val = node.op(*values)
-        return node._val
+        val = node.op(*values)
+        return val
     return partial(exec_numpy, node=graph)
 
 
 def grad(graph_root, params, verbose_level=0):
-    """ Backward-mode diff
+    """ Backward-mode automatic differentiate
     """
-    print("EXEC grad")
-    VJP_map = ad.ops.VJP_map
     # starting from graph_root node (=loss), make a function that composes VJP
     # one = ad.numpy.ones((1,))
     n_dim_root = len(graph_root.shape)
@@ -96,7 +94,7 @@ def grad(graph_root, params, verbose_level=0):
     while len(node_list):
         cur_node, cur_u = node_list.pop()
         if cur_node.op != None:
-            VJP = VJP_map[cur_node.op]
+            VJP = ad.ops.VJP_map[cur_node.op]
             # VJP is a function of cur_u and all the other arguments of the function
             children = [c for c in cur_node.children]
             current_us = VJP(cur_u, *children)
