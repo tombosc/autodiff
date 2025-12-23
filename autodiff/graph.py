@@ -75,12 +75,17 @@ def grad(f, params):
             # VJP is a function of cur_u and all the other arguments of the function
             children = [c for c in cur_node.children]
             current_us = VJP(cur_u, *children)
+            assert(len(current_us) == len(children))
             for child, u in zip(children, current_us):
                 node_list.append((child, u))
         else:
             # leaf, store gradients!
             name = cur_node.name
             print(f"Leaf... storing gradient {name}!")
-            Node.visualize(cur_u)
-            name_to_grad[name] = cur_u
-    return name_to_grad
+            # Node.visualize(cur_u)
+            cur_grad = name_to_grad.get(name, None)
+            if cur_grad is not None:
+                name_to_grad[name] = ad.ops.mat_mat_sum(cur_grad, cur_u)
+            else:
+                name_to_grad[name] = cur_u
+    return name_to_grad, name_ones
