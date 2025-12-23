@@ -2,6 +2,21 @@ import autodiff as ad
 import numpy as np
 from inspect import getmembers, isfunction, signature
 from functools import partial
+import uuid
+
+
+class Dimension():
+    global_inc = 0
+
+    def __init__(self):
+        self.name = "d_" + str(self.global_inc)
+        Dimension.global_inc += 1
+
+    def __str__(self):
+        return self.name
+
+    def __eq__(self, other):
+        return self.name == other.name
 
 
 class Node():
@@ -9,16 +24,24 @@ class Node():
 
     def __init__(self, op, shape, children, name=None):
         self.op = op
-        self.shape = shape
+        self.shape = []
+        for dim in shape:
+            if isinstance(dim, int):
+                self.shape.append(Dimension())
+            elif isinstance(dim, Dimension):
+                self.shape.append(dim)
+            else:
+                raise ValueError("Unrecognized shape")
         self.children = children
         self.name = name
         if name is None:
-            self.name = "aaaa_" + str(self.global_inc)
+            self.name = "node_" + str(self.global_inc)
             Node.global_inc += 1
 
     @staticmethod
     def visualize(node, indent=0):
-        print("  " * indent + f"{node.name} (op={node.op}, shape={node.shape})")
+        shape_str = "(" + ", ".join([str(d) for d in node.shape]) + ")"
+        print("  " * indent + f"{node.name} (op={node.op}, shape={shape_str})")
         for child in node.children:
             Node.visualize(child, indent + 1)
 
@@ -36,17 +59,18 @@ def build_graph(f, args):
         G = f(*tracers)
         return G
 
-def get_forward_fn(graph):
+
+def get_forward_fn(graph, verbose_level=0):
     def exec_numpy(node, **kwargs):
         """ v is a list of tensors.
         """
-        if len(node.children) == 0 and node.op == None:
-            # leaf!
-            # assign value
+        if len(node.children) == 0 and node.op == None:  # leaf
             node._val = kwargs[node.name]
             return
         values = []
         for child in node.children:
+            if verbose_level >= 1:
+                print(f"Computing child {child.name}")
             exec_numpy(child, **kwargs)
             values.append(child._val)
         assert node.op is not None, "Op is None but node not leaf?"
@@ -55,18 +79,19 @@ def get_forward_fn(graph):
     return partial(exec_numpy, node=graph)
 
 
-def grad(f, params):
+def grad(graph_root, params, verbose_level=0):
     """ Backward-mode diff
     """
     print("EXEC grad")
     VJP_map = ad.ops.VJP_map
-    root = build_graph(f, params)
-    breakpoint()
-    Node.visualize(root)
-    # starting from root node (=loss), make a function that composes VJP
+    # starting from graph_root node (=loss), make a function that composes VJP
     # one = ad.numpy.ones((1,))
-    one = Node(op=None, shape=(0,), children=[], name="ones")
-    node_list = [(root, one)]
+    n_dim_root = len(graph_root.shape)
+    short_id = uuid.uuid4().hex[:6]
+    name_ones = f"ones_{short_id}"
+    shape_ones = (0,)*n_dim_root
+    one = Node(op=None, shape=shape_ones, children=[], name=name_ones)
+    node_list = [(graph_root, one)]
     name_to_grad = {}
     while len(node_list):
         cur_node, cur_u = node_list.pop()

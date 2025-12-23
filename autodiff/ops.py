@@ -34,6 +34,36 @@ def vec_vec_mul(u, v):
         raise ValueError("Unrecognized value")
 
 
+def vec_vec_sum(u, v):
+    if all_nodes([u, v]):
+        assert len(u.shape) == 1, "invalid shape"
+        assert len(v.shape) == 1, "invalid shape"
+        return ad.graph.Node(
+            op=vec_vec_sum, 
+            shape=(0,),
+            children=[u, v],
+        )
+    elif all_arrays([u, v]):
+        return ad.numpy.Array(u.tensor + v.tensor)
+    else:
+        raise ValueError("Unrecognized value")
+
+
+def mat_mat_sum(u, v):
+    if all_nodes([u, v]):
+        assert len(u.shape) == 2, "invalid shape"
+        assert len(v.shape) == 2, "invalid shape"
+        return ad.graph.Node(
+            op=mat_mat_sum, 
+            shape=(1, 1),
+            children=[u, v],
+            name="sum",
+        )
+    elif all_arrays([u, v]):
+        return ad.numpy.Array(u.tensor + v.tensor)
+    else:
+        raise ValueError("Unrecognized value")
+
 def mat_transpose(M):
     if isinstance(M, ad.graph.Node):
         assert len(M.shape) == 2, "invalid shape"
@@ -66,8 +96,10 @@ def allinstance(type_, args):
 def all_nodes(args):
     return allinstance(ad.graph.Node, args)
 
+
 def all_arrays(args):
     return allinstance(ad.numpy.Array, args)
+
 
 def mat_vec(M, v):
     if all_nodes([M, v]):
@@ -83,26 +115,26 @@ def mat_vec(M, v):
             np.dot(M.tensor, v.tensor)
         )
     else:
-        breakpoint()
         raise ValueError("Unrecognized value")
 
 def mat_mat_mul(A, B):
     if all_nodes([A, B]):
         assert len(A.shape) == 2, "invalid shape"
         assert len(B.shape) == 2, "invalid shape"
+        # TODO: can we assert A.shape[1] == B.shape[0]?
         return ad.graph.Node(
-            op=mat_vec, 
-            shape=(1,1),
+            op=mat_mat_mul, 
+            shape=(A.shape[0],B.shape[1]),
             children=[A, B],
         )
     elif all_arrays([A, B]):
-        return ad.numpy.Array(A.tensor @ B)
+        return ad.numpy.Array(A.tensor @ B.tensor)
     else:
         raise ValueError("Unrecognized value")
 
 def scal_vec_mul(a, v):
     if all_nodes([a, v]):
-        # TODO implement scalar...
+        print("scal_vec_mul assert shapes", a.shape, v.shape)
         assert len(a.shape) == 1, "invalid shape"
         assert len(v.shape) == 1, "invalid shape"
         return ad.graph.Node(
@@ -131,20 +163,26 @@ def vec_to_row_mat(v):
     else:
         raise ValueError("Unrecognized value")
 
-# it's key to use ops here, and not numpy directly
+
 def vec_sum_VJP(u, v):
     if isinstance(v, ad.numpy.Array):
         one = ad.numpy.ones((v.tensor.shape[1],))
     elif isinstance(v, ad.graph.Node):
         one = ad.graph.Node(op=None, shape=(1,), children=[], name="ones_for_grad")
+    # Use ops here! Not numpy directly!
     return (scal_vec_mul(one, u),)
 
-def mat_vec_VJP(u, M, v):
-    # if isinstance(M, ad.numpy.Array):
-    #     ones = ad.numpy.ones((1,))
-    # elif isinstance(M, ad.graph.Node):
-    #     ones = ad.graph.Node(op=None, shape=(0,), children=[], name="ones")
 
+def vec_vec_sum_VJP(u, v, w):
+    u_col = mat_transpose(vec_to_row_mat(u))
+    return (u_col, u_col)
+
+
+def mat_mat_sum_VJP(C, A, B):
+    return (C, C)
+
+
+def mat_vec_VJP(u, M, v):
     # ȳ corresponds to the adjoint, argument u of the python function
     # ȳᵀdy = ȳᵀ(Mdv + dMv)
     #      = (Mdv)ᵀȳ + Tr(ȳᵀdMv)
@@ -157,16 +195,40 @@ def mat_vec_VJP(u, M, v):
         vec_to_row_mat(mat_vec(mat_transpose(M), u)),  # VJP of v
     )
 
-def scal_vec_mul_VJP(u, a, v):
+
+def vec_vec_mul_VJP(u, v, w):
     return (
-        scal_vec_mul(u, v),  
-        mat_transpose(scal_vec_mul(a, u))  
+        scal_vec_mul(u, w),
+        scal_vec_mul(u, v),
     )
 
 
+def scal_vec_mul_VJP(u, a, v):
+    return (
+        vec_vec_mul(u, v),  
+        scal_vec_mul(a, u),
+    )
+
+
+def mat_mat_mul_VJP(C, A, B):
+    return (
+        mat_mat_mul(C, mat_transpose(B)),
+        mat_mat_mul(mat_transpose(A), C),
+    )
+
+def mat_transpose_VJP(C, A):
+    return (
+        mat_transpose(C),
+    )
+
 VJP_map = {
-    vec_sum: vec_sum_VJP,
-    mat_vec: mat_vec_VJP,
-    scal_vec_mul: scal_vec_mul_VJP,
+    mat_mat_mul: mat_mat_mul_VJP,
+    # vec_vec_sum: vec_vec_sum_VJP,
+    mat_mat_sum: mat_mat_sum_VJP,
+    # vec_vec_mul: vec_vec_mul_VJP,
+    # vec_sum: vec_sum_VJP,
+    # mat_vec: mat_vec_VJP,
+    mat_transpose: mat_transpose_VJP,
+    # scal_vec_mul: scal_vec_mul_VJP,
     # TODO rest
 }

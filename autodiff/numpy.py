@@ -10,7 +10,7 @@ class Array:
         return self.tensor.shape
 
     def __str__(self):
-        return "AD-wrapped " + str(self.tensor)
+        return "AD.array " + str(self.tensor)
 
 def zeros(size, dtype=np.float32):
     tensor = np.zeros(size, dtype)
